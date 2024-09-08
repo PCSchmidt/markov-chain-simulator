@@ -3,6 +3,7 @@ import plotly.express as px
 import pandas as pd
 import numpy as np
 from typing import List, Dict
+from memory_profiler import profile
 
 def clean_data(data):
     """Clean data by replacing inf and NaN with None."""
@@ -61,6 +62,7 @@ def plot_returns_distribution(returns: pd.Series) -> dict:
     except Exception as e:
         return {'error': str(e)}
 
+@profile
 def plot_transition_matrix(transition_matrix: np.ndarray) -> dict:
     """Create a heatmap visualization of the transition matrix."""
     fig = px.imshow(transition_matrix,

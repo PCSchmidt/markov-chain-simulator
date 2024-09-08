@@ -1,0 +1,11 @@
+{
+  "simulation": {
+    "n_simulations": 1000,
+    "n_steps": 30,
+    "n_states": 3,
+    "discretization_method": "equal_freq"
+  },
+  "data": {
+    "period": "1y"
+  }
+}

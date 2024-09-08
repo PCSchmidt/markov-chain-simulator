@@ -1,72 +1,54 @@
 HEAD
 # Markov Chain Stock Simulator
 
-## Overview
+This application simulates stock prices using a Markov Chain model and provides comparison functionality for multiple stocks.
 
-The Markov Chain Stock Simulator is a web-based application that leverages Markov Chain Monte Carlo (MCMC) simulations to model and predict potential future stock price movements. This tool provides investors, analysts, and financial enthusiasts with a powerful means to visualize historical stock performance, understand price volatility, and explore possible future price trajectories based on historical data patterns.
+## Current Configuration
+
+- Simulation Parameters:
+  - Number of simulations: 1000
+  - Number of steps: 30
+  - Number of states: 3
+  - Discretization method: equal frequency
+
+- Stocks data period: 1 year
+
+## How to Run
+
+1. Clone the repository:
+   ```
+   git clone https://github.com/yourusername/markov-chain-simulator.git
+   cd markov-chain-simulator
+   ```
+
+2. Install the required dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
+
+3. Run the FastAPI server:
+   ```
+   uvicorn app.main:app --reload
+   ```
+
+4. Open your web browser and navigate to `http://localhost:8000`
 
 ## Features
 
-- **Historical Price Visualization**: Display stock price history for user-specified symbols and time periods.
-- **Returns Distribution Analysis**: Visualize the distribution of historical returns to understand stock volatility.
-- **Markov Chain Simulation**: Generate multiple simulated future price paths using MCMC techniques.
-- **Transition Probability Matrix**: Visualize the underlying Markov Chain model through a heatmap of state transition probabilities.
-- **Stock Comparison**: Compare multiple stocks side-by-side for comprehensive analysis.
-- **Customizable Parameters**: Adjust simulation parameters such as number of states, time steps, and simulation count.
+- Fetch historical stock data
+- Run Markov Chain simulations
+- Compare multiple stocks:
+  - Historical price comparison
+  - Returns distribution comparison
+  - Simulated price comparison
 
-## How It Works
+## Additional Information
 
-1. **Data Fetching**: The application retrieves historical stock data from reliable financial APIs.
-2. **Data Processing**: Raw price data is transformed into returns and discretized into states.
-3. **Markov Chain Modeling**: A transition probability matrix is constructed based on historical state transitions.
-4. **Monte Carlo Simulation**: Multiple price paths are simulated using the Markov Chain model.
-5. **Visualization**: Results are presented through interactive charts and heatmaps.
+- This project uses FastAPI for the backend and Plotly for data visualization.
+- Stock data is fetched using the yfinance library.
+- The Markov Chain simulation is implemented using NumPy.
 
-## Why It's Useful
-
-1. **Risk Assessment**: By simulating multiple potential future scenarios, users can better understand the range of possible outcomes and assess investment risks.
-2. **Pattern Recognition**: The transition probability matrix helps identify recurring patterns in stock price movements.
-3. **Comparative Analysis**: The ability to compare multiple stocks allows for informed decision-making in portfolio diversification.
-4. **Educational Tool**: Serves as an excellent resource for learning about Markov Chains, Monte Carlo methods, and their applications in finance.
-5. **Hypothesis Testing**: Users can test various market hypotheses by adjusting simulation parameters and observing outcomes.
-
-## Technical Details
-
-- **Backend**: FastAPI (Python)
-- **Frontend**: HTML, JavaScript, Plotly.js
-- **Key Libraries**: pandas, numpy, yfinance
-
-## Getting Started
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/markov-chain-stock-simulator.git
-   ```
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Run the FastAPI server:
-   ```bash
-   uvicorn app.main:app --reload
-   ```
-4. Open a web browser and navigate to `http://localhost:8000`
-
-## Future Enhancements
-
-- Integration with more sophisticated financial models
-- Real-time data streaming for live simulations
-- Machine learning integration for improved state discretization
-- User accounts for saving and sharing analyses
-
-## Disclaimer
-
-This application is for educational and research purposes only. It does not constitute financial advice, and all investment decisions should be made based on thorough research and consultation with qualified financial advisors.
-
-## Contributing
-
-Contributions to improve the Markov Chain Stock Simulator are welcome! Please feel free to submit pull requests or open issues for bugs and feature requests.
-
+For more detailed information on the implementation, please refer to the source code and comments within the project files.
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
@@ -74,3 +56,5 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 # markov-chain-simulator
 Takes in ticker symbols and price information and performs a markov chain simulation
 0e2880cba1c0525e8bb19648fcb486533aceaaf5
+
+

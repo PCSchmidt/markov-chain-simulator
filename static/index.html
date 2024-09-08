@@ -15,7 +15,7 @@
         <div class="row">
             <div class="input-section">
                 <h2>Stock Data</h2>
-                <input type="text" id="symbol" placeholder="Enter stock symbol">
+                <input type="text" id="symbol" placeholder="Enter stock symbol" value="AAPL">
                 <select id="period">
                     <option value="1y" selected>1 Year</option>
                     <!-- other options -->
@@ -56,8 +56,19 @@
             <div class="output-section">
                 <div id="comparison_price_history" class="chart"></div>
                 <div id="comparison_returns_distribution" class="chart"></div>
-                <div id="comparison_simulated_prices" class="chart full-width"></div>
+                <div id="comparison_simulations" class="chart full-width"></div>
             </div>
+        </div>
+
+        <div id="simulation-params">
+            <input type="number" id="n_simulations" value="1000">
+            <input type="number" id="n_steps" value="30">
+            <input type="number" id="n_states" value="3">
+            <select id="discretization_method">
+                <option value="equal_freq">Equal Frequency</option>
+                <option value="equal_width">Equal Width</option>
+            </select>
+            <button onclick="updateSimulationParams()">Update Parameters</button>
         </div>
     </div>
 

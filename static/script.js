@@ -25,48 +25,53 @@ async function fetchDataAndPlot() {
 }
 
 async function fetchStockData(symbol, period) {
-    const response = await fetch(`/fetch-data/${symbol}?period=${period}`);
-    if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+    try {
+        const response = await fetch(`/fetch-data/${symbol}?period=1y`);
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error(`Error fetching data for ${symbol}:`, error);
+        alert(`Failed to fetch data for ${symbol}: ${error.message}`);
+        throw error;
     }
-    return await response.json();
 }
 
 async function runSimulation() {
     const symbol = document.getElementById('symbol').value;
-    const n_simulations = document.getElementById('n_simulations').value;
-    const n_steps = document.getElementById('n_steps').value;
-    const n_states = document.getElementById('n_states').value;
-    const discretization_method = document.getElementById('discretization_method').value;
+    const nSimulations = document.getElementById('n_simulations').value;
+    const nSteps = document.getElementById('n_steps').value;
+    const nStates = document.getElementById('n_states').value;
+    const discretizationMethod = document.getElementById('discretization_method').value;
 
     try {
-        const response = await fetch(`/simulate/${symbol}?n_simulations=${n_simulations}&n_steps=${n_steps}&n_states=${n_states}&discretization_method=${discretization_method}`);
+        const response = await fetch(`/simulate/${symbol}?n_simulations=${nSimulations}&n_steps=${nSteps}&n_states=${nStates}&discretization_method=${discretizationMethod}`);
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            const errorData = await response.json();
+            throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
-        console.log('Simulation data:', data);  // Add this line for debugging
-        
-        if (data.simulated_prices) {
-            plotSimulatedPrices(data.simulated_prices);
-        } else {
-            console.error('Simulated prices not found in the response');
+        console.log("Received simulation data:", data);
+
+        if (!data || !data.simulated_prices || !Array.isArray(data.simulated_prices)) {
+            throw new Error('Invalid data structure received from server');
         }
+
+        plotSimulatedPrices(data.simulated_prices);
+        plotTransitionMatrix(data.transition_matrix);
         
-        if (data.transition_matrix) {
-            plotTransitionMatrix(data.transition_matrix);
-        } else {
-            console.error('Transition matrix not found in the response');
-        }
+        return data; // Return the data for potential further use
     } catch (error) {
-        console.error('Error running simulation:', error);
+        console.error('Error:', error);
         alert(`Error running simulation for ${symbol}: ${error.message}`);
+        throw error; // Re-throw the error for the caller to handle if needed
     }
 }
 
 // Plotting functions for individual stocks
 function plotPriceHistory(data) {
-    console.log('Plotting price history', data);
     const dates = Object.keys(data.data);
     const prices = Object.values(data.data);
 
@@ -79,33 +84,17 @@ function plotPriceHistory(data) {
     };
 
     const layout = {
-        title: {
-            text: `Price History - ${data.symbol}`,
-            font: { size: 24 }
-        },
-        xaxis: { 
-            title: 'Date',
-            tickangle: -45
-        },
-        yaxis: { 
-            title: 'Price ($)',
-            tickformat: '$.2f'
-        },
-        showlegend: true,
-        legend: {
-            x: 1,
-            xanchor: 'right',
-            y: 1
-        }
+        title: `Price History - ${data.symbol}`,
+        xaxis: { title: 'Date' },
+        yaxis: { title: 'Price ($)' }
     };
 
     Plotly.newPlot('price_history', [trace], layout);
 }
 
 function plotReturnsDistribution(data) {
-    console.log('Plotting returns distribution', data);
     const prices = Object.values(data.data);
-    const returns = calculateReturns(prices);
+    const returns = prices.slice(1).map((price, index) => (price - prices[index]) / prices[index]);
 
     const trace = {
         x: returns,
@@ -114,21 +103,16 @@ function plotReturnsDistribution(data) {
     };
 
     const layout = {
-        title: {
-            text: `Returns Distribution - ${data.symbol}`,
-            font: { size: 24 }
-        },
+        title: `Returns Distribution - ${data.symbol}`,
         xaxis: { title: 'Return (%)' },
-        yaxis: { title: 'Frequency' },
-        bargap: 0.05,
-        showlegend: false
+        yaxis: { title: 'Frequency' }
     };
 
     Plotly.newPlot('returns_distribution', [trace], layout);
 }
 
 function plotSimulatedPrices(simulatedPrices) {
-    const data = simulatedPrices.map((prices, index) => ({
+    const traces = simulatedPrices.slice(0, 10).map((prices, index) => ({
         y: prices,
         type: 'scatter',
         mode: 'lines',
@@ -141,7 +125,7 @@ function plotSimulatedPrices(simulatedPrices) {
         yaxis: { title: 'Price' }
     };
 
-    Plotly.newPlot('simulated_prices', data, layout);
+    Plotly.newPlot('simulated_prices', traces, layout);
 }
 
 // Comparison-related functions
@@ -170,95 +154,149 @@ function updateComparisonStocksList() {
 }
 
 async function updateComparisonCharts() {
-    const period = document.getElementById('period').value;
-    const stocksData = await Promise.all(comparisonStocks.map(symbol => fetchStockData(symbol, period)));
+    const comparisonStocksElement = document.getElementById('comparison_stocks');
+    if (!comparisonStocksElement) {
+        console.error("Element with id 'comparison_stocks' not found");
+        return;
+    }
     
-    plotComparisonPriceHistory(stocksData);
-    plotComparisonReturnsDistribution(stocksData);
-    
-    const n_simulations = document.getElementById('n_simulations').value;
-    const n_steps = document.getElementById('n_steps').value;
-    const n_states = document.getElementById('n_states').value;
-    const discretization_method = document.getElementById('discretization_method').value;
-    
-    const simulationResults = await Promise.all(stocksData.map(data => 
-        runSimulation(data.symbol, n_simulations, n_steps, n_states, discretization_method)
-    ));
-    
-    plotComparisonSimulatedPrices(simulationResults);
+    const comparisonStocks = comparisonStocksElement.textContent.split(',').map(s => s.trim()).filter(s => s);
+    console.log("Updating comparison charts for stocks:", comparisonStocks);
+
+    if (comparisonStocks.length === 0) {
+        console.log("No stocks to compare");
+        return;
+    }
+
+    const comparisonData = {};
+
+    for (const symbol of comparisonStocks) {
+        try {
+            console.log(`Fetching data for ${symbol}`);
+            const stockData = await fetchStockData(symbol);
+            console.log(`Running simulation for ${symbol}`);
+            const simulationData = await runSimulation(symbol);
+            comparisonData[symbol] = {
+                stockData: stockData,
+                simulationData: simulationData
+            };
+            console.log(`Data processed for ${symbol}:`, comparisonData[symbol]);
+        } catch (error) {
+            console.error(`Error processing ${symbol}:`, error);
+            alert(`Failed to process data for ${symbol}: ${error.message}`);
+            // Remove the failed stock from the comparison list
+            comparisonStocksElement.textContent = comparisonStocksElement.textContent
+                .split(',')
+                .filter(s => s.trim() !== symbol)
+                .join(', ');
+        }
+    }
+
+    console.log("Comparison data:", comparisonData);
+
+    if (Object.keys(comparisonData).length > 0) {
+        console.log("Plotting comparison charts");
+        try {
+            plotComparisonPriceHistory(comparisonData);
+            plotComparisonReturnsDistribution(comparisonData);
+            plotComparisonSimulations(comparisonData);
+        } catch (error) {
+            console.error("Error plotting comparison charts:", error);
+            alert("Error plotting comparison charts. See console for details.");
+        }
+    } else {
+        console.error("No valid data for comparison charts");
+        alert("Unable to generate comparison charts. Please check the entered stock symbols.");
+    }
 }
 
-function plotComparisonPriceHistory(stocksData) {
-    const traces = stocksData.map(stock => ({
-        x: Object.keys(stock.data),
-        y: Object.values(stock.data),
-        type: 'scatter',
-        mode: 'lines',
-        name: stock.symbol
-    }));
+function plotComparisonPriceHistory(comparisonData) {
+    console.log("Plotting comparison price history:", comparisonData);
+    const traces = [];
+    
+    for (const [symbol, data] of Object.entries(comparisonData)) {
+        if (data.stockData && data.stockData.data) {
+            const prices = Object.values(data.stockData.data);
+            const dates = Object.keys(data.stockData.data);
+            
+            traces.push({
+                x: dates,
+                y: prices,
+                type: 'scatter',
+                mode: 'lines',
+                name: symbol
+            });
+        } else {
+            console.warn(`No valid stock data for ${symbol}`);
+        }
+    }
 
     const layout = {
-        title: 'Price History Comparison',
+        title: 'Comparison of Historical Stock Prices',
         xaxis: { title: 'Date' },
-        yaxis: { title: 'Price ($)' },
-        showlegend: true,
-        legend: { orientation: 'h', y: -0.2 }
+        yaxis: { title: 'Price' }
     };
 
     Plotly.newPlot('comparison_price_history', traces, layout);
 }
 
-function plotComparisonReturnsDistribution(stocksData) {
-    const traces = stocksData.map(stock => {
-        const prices = Object.values(stock.data);
-        const returns = calculateReturns(prices);
-        return {
-            x: returns,
-            type: 'histogram',
-            name: stock.symbol,
-            opacity: 0.6
-        };
-    });
+function plotComparisonReturnsDistribution(comparisonData) {
+    console.log("Plotting comparison returns distribution:", comparisonData);
+    const traces = [];
+    
+    for (const [symbol, data] of Object.entries(comparisonData)) {
+        if (data.stockData && data.stockData.data) {
+            const prices = Object.values(data.stockData.data);
+            const returns = prices.slice(1).map((price, i) => (price - prices[i]) / prices[i]);
+            
+            traces.push({
+                x: returns,
+                type: 'histogram',
+                name: symbol,
+                opacity: 0.7,
+                nbinsx: 30
+            });
+        } else {
+            console.warn(`No valid stock data for ${symbol}`);
+        }
+    }
 
     const layout = {
-        title: 'Returns Distribution Comparison',
-        xaxis: { title: 'Return' },
+        title: 'Comparison of Returns Distribution',
+        xaxis: { title: 'Returns' },
         yaxis: { title: 'Frequency' },
-        barmode: 'overlay',
-        showlegend: true,
-        legend: { orientation: 'h', y: -0.2 }
+        barmode: 'overlay'
     };
 
     Plotly.newPlot('comparison_returns_distribution', traces, layout);
 }
 
-function plotComparisonSimulatedPrices(simulationResults) {
-    const colors = ['blue', 'red', 'green', 'purple', 'orange'];
-    const lineStyles = ['solid', 'dash', 'dot', 'dashdot'];
+function plotComparisonSimulations(comparisonData) {
+    console.log("Plotting comparison simulations:", comparisonData);
     const traces = [];
-
-    simulationResults.forEach((result, stockIndex) => {
-        // Only plot one simulation for each stock to avoid clutter
-        traces.push({
-            y: result.simulated_prices[0],
-            type: 'scatter',
-            mode: 'lines',
-            name: result.symbol,
-            line: {
-                color: colors[stockIndex % colors.length],
-                dash: lineStyles[stockIndex % lineStyles.length]
-            }
-        });
-    });
+    
+    for (const [symbol, data] of Object.entries(comparisonData)) {
+        if (data.simulationData && data.simulationData.simulated_prices && data.simulationData.simulated_prices.length > 0) {
+            const simulatedPrices = data.simulationData.simulated_prices[0]; // Use the first simulation for comparison
+            
+            traces.push({
+                y: simulatedPrices,
+                type: 'scatter',
+                mode: 'lines',
+                name: symbol
+            });
+        } else {
+            console.warn(`No valid simulation data for ${symbol}`);
+        }
+    }
 
     const layout = {
         title: 'Comparison of Simulated Stock Prices',
         xaxis: { title: 'Time Steps' },
-        yaxis: { title: 'Price ($)' },
-        showlegend: true
+        yaxis: { title: 'Price' }
     };
 
-    Plotly.newPlot('comparison_simulated_prices', traces, layout);
+    Plotly.newPlot('comparison_simulations', traces, layout);
 }
 
 // Event listeners and initialization
@@ -279,28 +317,31 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const addComparisonBtn = document.getElementById('add_comparison');
     if (addComparisonBtn) {
-        addComparisonBtn.addEventListener('click', addComparisonStock);
+        addComparisonBtn.addEventListener('click', function() {
+            const symbol = document.getElementById('compare_symbol').value.trim().toUpperCase();
+            if (symbol) {
+                const comparisonStocks = document.getElementById('comparison_stocks');
+                if (comparisonStocks.textContent.includes(symbol)) {
+                    alert(`${symbol} is already in the comparison list.`);
+                } else {
+                    comparisonStocks.textContent += (comparisonStocks.textContent ? ', ' : '') + symbol;
+                    document.getElementById('compare_symbol').value = '';
+                    updateComparisonCharts();
+                }
+            } else {
+                alert('Please enter a valid stock symbol.');
+            }
+        });
     }
 
     const runSimulationBtn = document.getElementById('run_simulation');
     if (runSimulationBtn) {
-        runSimulationBtn.addEventListener('click', async function() {
-            const symbol = document.getElementById('symbol').value;
-            const n_simulations = document.getElementById('n_simulations').value;
-            const n_steps = document.getElementById('n_steps').value;
-            const n_states = document.getElementById('n_states').value;
-            const discretization_method = document.getElementById('discretization_method').value;
-
-            try {
-                const data = await runSimulation(symbol, n_simulations, n_steps, n_states, discretization_method);
-                plotSimulatedPrices(data);
-                plotTransitionMatrix(data.transition_matrix); // Add this line
-            } catch (error) {
-                console.error('Error:', error);
-                alert(`Error running simulation for ${symbol}: ${error.message}`);
-            }
-        });
+        runSimulationBtn.addEventListener('click', runSimulation);
+    } else {
+        console.error('Run Simulation button not found');
     }
+
+    // ... other code ...
 });
 
 function plotTransitionMatrix(transitionMatrix) {
@@ -312,8 +353,8 @@ function plotTransitionMatrix(transitionMatrix) {
 
     const layout = {
         title: 'Transition Probability Matrix',
-        xaxis: {title: 'To State'},
-        yaxis: {title: 'From State'}
+        xaxis: { title: 'To State' },
+        yaxis: { title: 'From State' }
     };
 
     Plotly.newPlot('transition_matrix', data, layout);
