@@ -73,5 +73,8 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 # markov-chain-simulator
 Takes in ticker symbols and price information and performs a markov chain simulation
+<<<<<<< HEAD
 
+=======
+>>>>>>> dev
 0e2880cba1c0525e8bb19648fcb486533aceaaf5

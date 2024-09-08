@@ -34,8 +34,8 @@ app = FastAPI()
 # Mount the static files directory
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Wrap your app with WhiteNoise
-app = WhiteNoise(app, root="static/")
+# Create a WhiteNoise object for serving static files
+whitenoise = WhiteNoise(app, root="static/")
 
 class StockData(BaseModel):
     symbol: constr(min_length=1, max_length=10)
@@ -232,3 +232,6 @@ def custom_json_serializer(obj):
     elif isinstance(obj, np.floating):
         return float(obj)
     raise TypeError(f'Object of type {obj.__class__.__name__} is not JSON serializable')
+
+# At the end of the file, expose the WhiteNoise wrapped app
+app = whitenoise
