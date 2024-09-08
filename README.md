@@ -1,3 +1,4 @@
+HEAD
 # Markov Chain Stock Simulator
 
 ## Overview
@@ -69,3 +70,8 @@ Contributions to improve the Markov Chain Stock Simulator are welcome! Please fe
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+# markov-chain-simulator
+Takes in ticker symbols and price information and performs a markov chain simulation
+
+0e2880cba1c0525e8bb19648fcb486533aceaaf5
