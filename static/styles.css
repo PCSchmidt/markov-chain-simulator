@@ -108,3 +108,10 @@ button:hover {
     border-radius: 5px;
     z-index: 1000;
 }
+
+#transition_matrix {
+    width: 48%;
+    height: 300px;
+    margin-right: 2%;
+    margin-bottom: 20px;
+}

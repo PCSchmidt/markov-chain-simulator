@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from memory_profiler import profile
 
 def calculate_returns(prices):
     """Calculate daily returns from a series of prices."""
@@ -18,6 +19,7 @@ def calculate_cvar(returns, confidence_level=0.95):
     var = calculate_var(returns, confidence_level)
     return returns[returns <= var].mean()
 
+@profile
 def perform_risk_analysis(prices):
     """Perform basic risk analysis on a series of prices."""
     returns = calculate_returns(prices)

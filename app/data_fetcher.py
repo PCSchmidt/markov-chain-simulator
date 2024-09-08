@@ -29,7 +29,7 @@ def fetch_stock_data(symbol: str, period: str = "1y") -> dict:
     
     :param symbol: Stock symbol (e.g., 'AAPL' for Apple)
     :param period: Time period to fetch data for (default is 1 year)
-    :return: DataFrame containing dates and closing prices
+    :return: Dictionary containing dates, closing prices, and volume
     """
     try:
         logger.info(f"Fetching data for {symbol} over {period}")
@@ -55,13 +55,12 @@ def fetch_stock_data(symbol: str, period: str = "1y") -> dict:
         cleaned_data = cleaned_data.dropna(subset=['Close'])
         
         result = {
-            "price": cleaned_data["Close"].tolist(),
-            "dates": cleaned_data.index.strftime('%Y-%m-%d').tolist(),
-            "volume": cleaned_data["Volume"].tolist()
+            "price": (float(price) for price in cleaned_data["Close"]),
+            "dates": (date.strftime('%Y-%m-%d') for date in cleaned_data.index),
+            "volume": (int(volume) for volume in cleaned_data["Volume"])
         }
         
-        logger.info(f"Processed data for {symbol}: {len(result['price'])} price points, {len(result['dates'])} dates, {len(result['volume'])} volume points")
-        logger.info(f"Sample of processed data: {result['price'][:5]}")
+        logger.info(f"Processed data for {symbol}")
         
         return result
     except Exception as e:

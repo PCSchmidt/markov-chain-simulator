@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 from typing import Tuple, List, Callable
+from memory_profiler import profile
 
 def calculate_returns(prices: pd.Series) -> pd.Series:
     """Calculate daily returns from a series of prices."""
@@ -42,42 +43,52 @@ def simulate_markov_chain(initial_state: int, transition_matrix: np.ndarray, n_s
     
     return states
 
-def run_markov_simulation(returns: pd.Series, n_simulations: int = 1000, n_steps: int = 30, n_states: int = 3, discretization_method: str = "equal_freq") -> Tuple[List[np.ndarray], np.ndarray]:
-    """
-    Run Markov Chain Monte Carlo simulation.
+@profile
+def run_markov_simulation(prices: List[float], n_simulations: int, n_steps: int, n_states: int, discretization_method: str) -> Tuple[List[List[float]], List[List[float]]]:
+    # Calculate returns, removing any infinite or NaN values
+    returns = np.diff(prices) / prices[:-1]
+    returns = returns[np.isfinite(returns)]
     
-    Args:
-        returns (pd.Series): Series of historical returns
-        n_simulations (int): Number of simulations to run
-        n_steps (int): Number of steps in each simulation
-        n_states (int): Number of states for discretization
-        discretization_method (str): Method for discretizing returns ('equal_freq' or 'equal_width')
-    
-    Returns:
-        Tuple[List[np.ndarray], np.ndarray]: List of simulations and transition matrix
-    """
-    if discretization_method == "equal_freq":
-        discretized_returns = discretize_returns_equal_freq(returns, n_states)
-    elif discretization_method == "equal_width":
-        discretized_returns = discretize_returns_equal_width(returns, n_states)
-    else:
-        raise ValueError("Invalid discretization method. Use 'equal_freq' or 'equal_width'.")
+    if len(returns) < 2:
+        raise ValueError("Not enough valid price data to perform simulation")
 
-    # Convert to numeric codes
-    if isinstance(discretized_returns, pd.Categorical):
-        discretized_returns = discretized_returns.codes
-    elif isinstance(discretized_returns, pd.Series) and isinstance(discretized_returns.dtype, pd.CategoricalDtype):
-        discretized_returns = discretized_returns.cat.codes
-    else:
-        discretized_returns = pd.factorize(discretized_returns)[0]
-
-    transition_matrix = create_transition_matrix(discretized_returns, n_states)
+    # Discretize returns
+    if discretization_method == "equal_width":
+        bins = np.linspace(returns.min(), returns.max(), n_states + 1)
+    else:  # equal_freq
+        bins = np.percentile(returns, np.linspace(0, 100, n_states + 1))
     
-    initial_state = discretized_returns[-1]
-    simulations = [simulate_markov_chain(initial_state, transition_matrix, n_steps) 
-                   for _ in range(n_simulations)]
+    discretized = np.digitize(returns, bins[1:-1])
     
-    return simulations, transition_matrix
+    # Calculate transition matrix
+    transition_matrix = np.zeros((n_states, n_states))
+    for i in range(len(discretized) - 1):
+        transition_matrix[discretized[i], discretized[i+1]] += 1
+    
+    # Handle potential division by zero
+    row_sums = transition_matrix.sum(axis=1, keepdims=True)
+    transition_matrix = np.divide(transition_matrix, row_sums, where=row_sums!=0)
+    
+    # Replace any remaining NaNs with uniform distribution
+    nan_rows = np.isnan(transition_matrix).any(axis=1)
+    transition_matrix[nan_rows] = 1 / n_states
+    
+    # Ensure the transition matrix is valid (rows sum to 1)
+    transition_matrix /= transition_matrix.sum(axis=1, keepdims=True)
+    
+    # Simulate
+    simulated_prices = []
+    initial_price = prices[-1]
+    for _ in range(n_simulations):
+        current_state = np.random.choice(n_states)
+        sim_prices = [initial_price]
+        for _ in range(n_steps):
+            current_state = np.random.choice(n_states, p=transition_matrix[current_state])
+            return_rate = np.random.uniform(bins[current_state], bins[current_state+1])
+            sim_prices.append(sim_prices[-1] * (1 + return_rate))
+        simulated_prices.append(sim_prices)
+    
+    return simulated_prices, transition_matrix.tolist()
 
 def simulate_prices(initial_price: float, simulated_states: List[int], returns: pd.Series) -> np.ndarray:
     """Convert simulated states back to prices."""

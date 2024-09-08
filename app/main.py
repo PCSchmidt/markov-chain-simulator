@@ -1,38 +1,35 @@
-import logging
-from fastapi import FastAPI, HTTPException, Query, Request, Response
+import os
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, constr
-from typing import Dict, List
-import pandas as pd
+import yfinance as yf
 import numpy as np
-from .data_fetcher import fetch_stock_data
-from .risk_analysis import perform_risk_analysis
-from .visualizations import prepare_price_history_data, prepare_returns_distribution_data, plot_transition_matrix
-from .markov_chain import run_markov_simulation, compare_models, calculate_returns, simulate_prices
-import asyncio
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.inmemory import InMemoryBackend
+from fastapi_cache.decorator import cache
 import json
-import traceback
-from whitenoise import WhiteNoise
-import os
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
-
-# Access environment variables
-API_KEY = os.getenv("API_KEY")
-DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
-
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from typing import List
+from .markov_chain import run_markov_simulation  # Make sure this import is correct
 
 app = FastAPI()
 
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Get the directory of the current file (main.py)
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# Go up one level to the project root and then into the static folder
+static_dir = os.path.join(current_dir, "..", "static")
+
 # Mount the static files directory
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 # Create a WhiteNoise object for serving static files
 whitenoise = WhiteNoise(app, root="static/")
@@ -71,95 +68,50 @@ async def shutdown_event():
     # For example, if you're using a database:
     # await database.disconnect()
 
+@app.on_event("startup")
+async def startup_event():
+    FastAPICache.init(InMemoryBackend())
+
+
 @app.get("/")
 async def root():
-    return FileResponse("static/index.html")
+    return FileResponse(os.path.join(static_dir, "index.html"))
 
-@app.get("/fetch-data/{symbol}", response_model=StockData)
-async def get_stock_data(symbol: constr(min_length=1, max_length=10), period: str = Query("1y", regex="^[1-5][ydwm]$")) -> StockData:
+@app.get("/fetch-data/{symbol}")
+@cache(expire=3600)  # Cache for 1 hour
+async def get_stock_data(symbol: str, period: str = Query("1y", regex="^(1d|5d|1mo|3mo|6mo|1y|2y|5y|10y|ytd|max)$")):
     try:
-        data = fetch_stock_data(symbol, period)
-        if not data['price']:  # Check if the list is empty
-            raise ValueError(f"No data available for {symbol}")
-        # Convert data to the format expected by the frontend
-        data_dict = {str(i): price for i, price in enumerate(data['price'])}
-        return StockData(symbol=symbol, data=data_dict)
+        stock = yf.Ticker(symbol)
+        data = stock.history(period=period)
+        
+        if data.empty:
+            raise HTTPException(status_code=404, detail=f"No data found for {symbol}. The stock may be delisted or the symbol may be incorrect.")
+        
+        # Convert Timestamp index to string dates
+        stock_data = data['Close'].to_dict()
+        stock_data = {k.strftime("%Y-%m-%d"): float(v) if np.isfinite(v) else None for k, v in stock_data.items()}
+        
+        return {"symbol": symbol, "data": stock_data}
     except Exception as e:
-        logger.error(f"Error fetching data for {symbol}: {str(e)}")
-        raise HTTPException(status_code=404, detail=f"Error fetching data for {symbol}: {str(e)}")
-
-@app.get("/risk-analysis/{symbol}", response_model=RiskAnalysis)
-async def get_risk_analysis(symbol: constr(min_length=1, max_length=10), period: str = Query("1y", regex="^[1-5][ydwm]$")) -> RiskAnalysis:
-    try:
-        data = fetch_stock_data(symbol, period)
-        risk_metrics = perform_risk_analysis(data['price'])
-        return RiskAnalysis(**risk_metrics)
-    except ValueError as e:
-        logger.error(f"Error performing risk analysis for {symbol}: {str(e)}")
-        raise HTTPException(status_code=404, detail=f"Error performing risk analysis for {symbol}: {str(e)}")
-
-@app.get("/visualize/{symbol}")
-async def get_visualizations(
-    symbol: constr(min_length=1, max_length=10),
-    period: str = Query("1y", regex="^[1-5][ydwm]$")
-):
-    try:
-        logger.info(f"Fetching data for {symbol}")
-        data = fetch_stock_data(symbol, period)
-        
-        logger.info(f"Preparing price history for {symbol}")
-        price_history = {
-            'dates': data['dates'],
-            'prices': data['price']
-        }
-        
-        logger.info(f"Calculating returns for {symbol}")
-        returns = calculate_returns(data['price'])
-        
-        result = {
-            "price_history": price_history,
-            "returns_distribution": returns
-        }
-
-        logger.info(f"Visualization data prepared for {symbol}")
-        logger.info(f"Sample of price data: {result['price_history']['prices'][:5]}")
-        logger.info(f"Sample of returns data: {result['returns_distribution'][:5]}")
-        
-        json_result = json.dumps(result, default=custom_json_serializer)
-        logger.info(f"JSON encoding successful for {symbol}")
-        
-        return JSONResponse(content=json.loads(json_result))
-    except Exception as e:
-        logger.error(f"Error in get_visualizations for {symbol}: {str(e)}")
-        logger.error(traceback.format_exc())
-        return JSONResponse(content={"error": str(e)}, status_code=500)
+        raise HTTPException(status_code=500, detail=f"Error fetching data for {symbol}: {str(e)}")
 
 @app.get("/simulate/{symbol}")
-async def run_simulation(
-    symbol: constr(min_length=1, max_length=10),
+async def simulate(
+    symbol: str,
     n_simulations: int = Query(1000, ge=1, le=10000),
     n_steps: int = Query(30, ge=1, le=252),
     n_states: int = Query(3, ge=2, le=10),
     discretization_method: str = Query("equal_freq", regex="^(equal_width|equal_freq)$")
 ):
     try:
-        data = fetch_stock_data(symbol, "1y")
-        if not data['price'] or len(data['price']) < 2:
-            raise ValueError(f"Insufficient data for {symbol}")
+        stock_data = await get_stock_data(symbol, "1y")
+        prices = list(stock_data['data'].values())
         
-        returns = calculate_returns(pd.Series(data['price']))
-        initial_price = data['price'][-1]
-
-        simulations, transition_matrix = run_markov_simulation(
-            returns, n_simulations, n_steps, n_states, discretization_method
-        )
-
-        simulated_prices = [simulate_prices(initial_price, sim, returns).tolist() for sim in simulations[:10]]  # Limit to 10 simulations for visualization
-
+        simulated_prices, transition_matrix = run_markov_simulation(prices, n_simulations, n_steps, n_states, discretization_method)
+        
         result = {
             "simulated_prices": simulated_prices,
-            "transition_matrix": transition_matrix.tolist(),
-            "transition_matrix_plot": plot_transition_matrix(transition_matrix),
+            "transition_matrix": transition_matrix,
             "parameters": {
                 "n_simulations": n_simulations,
                 "n_steps": n_steps,
@@ -167,14 +119,10 @@ async def run_simulation(
                 "discretization_method": discretization_method
             }
         }
-
-        logger.info(f"Simulation result structure: {json.dumps(result, default=custom_json_serializer)}")
-
-        return JSONResponse(content=json.loads(json.dumps(result, default=custom_json_serializer)))
+        return JSONResponse(content=json.loads(json.dumps(result, default=float)))
     except Exception as e:
-        logger.error(f"Error in run_simulation for {symbol}: {str(e)}")
-        logger.error(traceback.format_exc())
-        return JSONResponse(content={"error": str(e)}, status_code=500)
+        raise HTTPException(status_code=500, detail=f"Error simulating {symbol}: {str(e)}")
+
 
 @app.get("/compare-models/{symbol}")
 async def compare_markov_models(
@@ -235,3 +183,6 @@ def custom_json_serializer(obj):
 
 # At the end of the file, expose the WhiteNoise wrapped app
 app = whitenoise
+
+# Add other route handlers here (like simulate, etc.)
+

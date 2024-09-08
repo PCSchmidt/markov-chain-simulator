@@ -1,0 +1,135 @@
+import os
+import logging
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, constr
+from typing import Dict, List
+import pandas as pd
+import numpy as np
+from .data_fetcher import fetch_stock_data
+from .risk_analysis import perform_risk_analysis
+from .markov_chain import run_markov_simulation, compare_models, calculate_returns, simulate_prices
+import json
+import os
+from dotenv import load_dotenv
+from functools import lru_cache
+import yfinance as yf
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.inmemory import InMemoryBackend
+from fastapi_cache.decorator import cache
+
+# Load environment variables
+load_dotenv()
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+app = FastAPI()
+
+# Mount the static files directory
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Wrap your app with WhiteNoise
+app = WhiteNoise(app, root="static/")
+=======
+# Get the directory of the current file (main.py)
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# Go up one level to the project root and then into the static folder
+static_dir = os.path.join(current_dir, "..", "static")
+>>>>>>> Stashed changes
+
+# Mount the static files directory
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
+
+@app.on_event("startup")
+async def startup_event():
+    FastAPICache.init(InMemoryBackend())
+
+@lru_cache(maxsize=32)
+def cached_fetch_stock_data(symbol: str, period: str):
+    # Implement your data fetching logic here
+    # This is a placeholder
+    return {"price": [100, 101, 102, 103, 104]}
+
+# Pydantic models and route handlers remain the same
+# ...
+
+@app.get("/")
+async def root():
+    return FileResponse(os.path.join(static_dir, "index.html"))
+
+# Other route handlers remain the same
+# ...
+
+@app.get("/fetch-data/{symbol}")
+@cache(expire=3600)  # Cache for 1 hour
+async def get_stock_data(symbol: str, period: str = Query("1y", regex="^(1d|5d|1mo|3mo|6mo|1y|2y|5y|10y|ytd|max)$")):
+    try:
+        stock = yf.Ticker(symbol)
+        data = stock.history(period=period)
+        
+        if data.empty:
+            raise HTTPException(status_code=404, detail=f"No data found for {symbol}. The stock may be delisted or the symbol may be incorrect.")
+        
+        # Convert Timestamp index to string dates
+        stock_data = data['Close'].to_dict()
+        stock_data = {k.strftime("%Y-%m-%d"): float(v) if np.isfinite(v) else None for k, v in stock_data.items()}
+        
+        return {"symbol": symbol, "data": stock_data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching data for {symbol}: {str(e)}")
+
+@app.get("/simulate/{symbol}")
+async def simulate(
+    symbol: str,
+    n_simulations: int = Query(1000, ge=1, le=10000),
+    n_steps: int = Query(30, ge=1, le=252),
+    n_states: int = Query(3, ge=2, le=10),
+    discretization_method: str = Query("equal_freq", regex="^(equal_width|equal_freq)$")
+):
+    try:
+        stock_data = await get_stock_data(symbol, "1y")
+        prices = list(stock_data['data'].values())
+        
+        simulated_prices, transition_matrix = run_markov_simulation(prices, n_simulations, n_steps, n_states, discretization_method)
+        
+        result = {
+            "simulated_prices": simulated_prices,
+            "transition_matrix": transition_matrix,
+            "parameters": {
+                "n_simulations": n_simulations,
+                "n_steps": n_steps,
+                "n_states": n_states,
+                "discretization_method": discretization_method
+            }
+        }
+        return JSONResponse(content=json.loads(json.dumps(result, default=float)))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error simulating {symbol}: {str(e)}")
+
+def custom_json_serializer(obj):
+    if isinstance(obj, (np.int64, np.float64, np.integer, np.floating)):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+
+    elif isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    raise TypeError(f'Object of type {obj.__class__.__name__} is not JSON serializable')
+    raise TypeError(f'Object of type {obj.__class__.__name__} is not JSON serializable')
+
+
