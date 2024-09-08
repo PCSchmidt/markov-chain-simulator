@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markov Chain Stock Simulator</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Markov Chain Stock Simulator</h1>
+        
+        <div class="row">
+            <div class="input-section">
+                <h2>Stock Data</h2>
+                <input type="text" id="symbol" placeholder="Enter stock symbol">
+                <select id="period">
+                    <option value="1y" selected>1 Year</option>
+                    <!-- other options -->
+                </select>
+                <button id="fetch-data-btn">Fetch Data</button>
+            </div>
+            <div class="output-section">
+                <div id="price_history" class="chart"></div>
+                <div id="returns_distribution" class="chart"></div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="input-section">
+                <h2>Simulation</h2>
+                <input type="number" id="n_simulations" placeholder="Number of Simulations" value="1000">
+                <input type="number" id="n_steps" placeholder="Number of Steps" value="30">
+                <input type="number" id="n_states" placeholder="Number of States" value="3">
+                <select id="discretization_method">
+                    <option value="equal_freq">Equal Frequency</option>
+                    <option value="equal_width">Equal Width</option>
+                </select>
+                <button id="run_simulation">Run Simulation</button>
+            </div>
+            <div class="output-section">
+                <div id="simulated_prices" class="chart"></div>
+                <div id="transition_matrix" class="chart"></div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="input-section">
+                <h2>Comparison</h2>
+                <input type="text" id="compare_symbol" placeholder="Enter stock symbol for comparison">
+                <button id="add_comparison">Add to Comparison</button>
+                <div id="comparison_stocks"></div>
+            </div>
+            <div class="output-section">
+                <div id="comparison_price_history" class="chart"></div>
+                <div id="comparison_returns_distribution" class="chart"></div>
+                <div id="comparison_simulated_prices" class="chart full-width"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="loading" id="loading_indicator">Loading...</div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
